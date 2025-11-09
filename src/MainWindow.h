@@ -9,6 +9,7 @@ class SelectablePdfView;
 class QPdfSearchModel;
 class QLabel;
 class QAction;
+class QTimer;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -23,6 +24,7 @@ private:
     void updateSearchStatus();
     void jumpToSearchResult(int idx);
     void updatePageCountLabel();
+    void ensureSearchModel();
 
     QPdfDocument* m_doc {nullptr};
     SelectablePdfView* m_view {nullptr};
@@ -33,4 +35,6 @@ private:
     QAction* m_actFindPrev {nullptr};
     QAction* m_actFindNext {nullptr};
     QLabel* m_pageCountLabel {nullptr};
+    QTimer* m_searchDebounce {nullptr};
+    bool m_searchInitialized {false};
 };

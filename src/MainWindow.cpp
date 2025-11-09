@@ -22,6 +22,7 @@
 #include <QPainter>
 #include <QPrinter>
 #include <QPrintDialog>
+#include <QTimer>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -36,9 +37,9 @@ void MainWindow::setupUi()
     m_view = new SelectablePdfView(this);
     m_view->setDocument(m_doc);
 
-    // Favor fast, simple rendering but show all pages
-    m_view->setPageMode(QPdfView::PageMode::MultiPage);
-    m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+    // Progressive first paint: start with SinglePage + FitInView, switch later
+    m_view->setPageMode(QPdfView::PageMode::SinglePage);
+    m_view->setZoomMode(QPdfView::ZoomMode::FitInView);
     m_view->setPageSpacing(0);
     m_view->setDocumentMargins(QMargins());
 
@@ -113,11 +114,15 @@ void MainWindow::setupUi()
     m_searchStatus->setAlignment(Qt::AlignCenter);
     tb->addWidget(m_searchStatus);
 
-    // Search model highlights matches inside the view
-    m_searchModel = new QPdfSearchModel(this);
-    m_searchModel->setDocument(m_doc);
-    m_view->setSearchModel(m_searchModel);
-    connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString& txt){
+    // Debounced search init; model is created lazily on first need
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(150); // debounce ~150ms
+    connect(m_searchDebounce, &QTimer::timeout, this, [this]{
+        const QString txt = m_searchEdit->text();
+        ensureSearchModel();
+        if (!m_searchModel)
+            return;
         if (txt.size() >= 2) {
             m_searchModel->setSearchString(txt);
         } else {
@@ -126,9 +131,14 @@ void MainWindow::setupUi()
         }
         updateSearchStatus();
     });
+    connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString&){
+        if (!m_searchDebounce) return;
+        m_searchDebounce->start();
+    });
 
     // Navigate between matches with Enter/Shift+Enter
     connect(m_searchEdit, &QLineEdit::returnPressed, this, [this]{
+        ensureSearchModel();
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0)
             return;
@@ -140,6 +150,7 @@ void MainWindow::setupUi()
     });
 
     connect(m_actFindNext, &QAction::triggered, this, [this]{
+        ensureSearchModel();
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0) return;
         int idx = (m_view->currentSearchResultIndex() + 1) % count;
@@ -148,6 +159,7 @@ void MainWindow::setupUi()
         updateSearchStatus();
     });
     connect(m_actFindPrev, &QAction::triggered, this, [this]{
+        ensureSearchModel();
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0) return;
         int idx = m_view->currentSearchResultIndex();
@@ -158,18 +170,7 @@ void MainWindow::setupUi()
     });
 
     // Status updates
-    connect(m_searchModel, &QPdfSearchModel::countChanged, this, &MainWindow::updateSearchStatus);
-    // Ensure highlighting kicks in while typing: set current index to 0 when results appear
-    connect(m_searchModel, &QPdfSearchModel::countChanged, this, [this]{
-        const QString term = m_searchEdit ? m_searchEdit->text() : QString();
-        const int count = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
-        if (term.size() >= 2 && count > 0) {
-            if (m_view->currentSearchResultIndex() < 0)
-                m_view->setCurrentSearchResultIndex(0); // do not jump here
-        } else {
-            m_view->setCurrentSearchResultIndex(-1);
-        }
-    });
+    // These will be connected once the search model is created
     connect(m_view, &QPdfView::currentSearchResultIndexChanged, this, &MainWindow::updateSearchStatus);
     // Page count label updates
     connect(m_doc, &QPdfDocument::pageCountChanged, this, [this](int){ updatePageCountLabel(); });
@@ -285,6 +286,12 @@ void MainWindow::openPdf(const QString& filePath)
     m_currentFilePath = fi.absoluteFilePath();
     setWindowTitle(fi.fileName());
     updatePageCountLabel();
+
+    // After first event loop tick, switch to MultiPage + FitToWidth
+    QTimer::singleShot(0, this, [this]{
+        m_view->setPageMode(QPdfView::PageMode::MultiPage);
+        m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+    });
 }
 
 void MainWindow::updateSearchStatus()
@@ -328,4 +335,27 @@ void MainWindow::updatePageCountLabel()
     if (!m_pageCountLabel) return;
     const int pc = m_doc ? m_doc->pageCount() : 0;
     m_pageCountLabel->setText(pc > 0 ? QString::number(pc) : QStringLiteral("-"));
+}
+
+void MainWindow::ensureSearchModel()
+{
+    if (m_searchInitialized)
+        return;
+    m_searchInitialized = true;
+    m_searchModel = new QPdfSearchModel(this);
+    m_searchModel->setDocument(m_doc);
+    m_view->setSearchModel(m_searchModel);
+
+    connect(m_searchModel, &QPdfSearchModel::countChanged, this, &MainWindow::updateSearchStatus);
+    // Ensure highlighting kicks in while typing: set current index to 0 when results appear
+    connect(m_searchModel, &QPdfSearchModel::countChanged, this, [this]{
+        const QString term = m_searchEdit ? m_searchEdit->text() : QString();
+        const int count = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
+        if (term.size() >= 2 && count > 0) {
+            if (m_view->currentSearchResultIndex() < 0)
+                m_view->setCurrentSearchResultIndex(0); // do not jump here
+        } else {
+            m_view->setCurrentSearchResultIndex(-1);
+        }
+    });
 }

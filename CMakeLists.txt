@@ -9,6 +9,11 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Default to Release if not specified
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Pdf PdfWidgets PrintSupport)
 
 add_executable(QtPdfView
@@ -47,4 +52,16 @@ if(WIN32)
     COMMAND "${WINDEPLOYQT_EXECUTABLE}" --release --no-translations --compiler-runtime "$<TARGET_FILE:QtPdfView>"
     COMMENT "Post-build: windeployqt"
     VERBATIM)
+endif()
+
+# Enable LTO and strip in Release when supported
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
+if(ipo_supported)
+  set_property(TARGET QtPdfView PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()
+
+if(MINGW)
+  string(APPEND CMAKE_CXX_FLAGS_RELEASE " -O3 -ffunction-sections -fdata-sections -flto")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS_RELEASE " -s -Wl,--gc-sections")
 endif()
