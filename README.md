@@ -12,7 +12,9 @@ Build
 
 Run
 - Windows: `build/Release/QtPdfView.exe` (MSVC) or `build/QtPdfView.exe` (Ninja/MinGW)
-- It automatically opens `license.pdf` from the current directory.
+- Usage: `QtPdfView.exe [PDF_PATH]`
+  - If `[PDF_PATH]` is provided, it opens that file.
+  - Otherwise automatically opens `license.pdf` from the current directory (or project root fallback).
 
 Notes
 - Search: type into the toolbar; matches are highlighted.
