@@ -58,9 +58,9 @@ void MainWindow::setupUi()
     m_view = new SelectablePdfView(this);
     m_view->setDocument(m_doc);
 
-    // Progressive first paint: start with SinglePage + FitInView, switch later
-    m_view->setPageMode(QPdfView::PageMode::SinglePage);
-    m_view->setZoomMode(QPdfView::ZoomMode::FitInView);
+    // Fast default: directly MultiPage + FitToWidth (no double render)
+    m_view->setPageMode(QPdfView::PageMode::MultiPage);
+    m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
     m_view->setPageSpacing(0);
     m_view->setDocumentMargins(QMargins());
 
@@ -76,9 +76,7 @@ void MainWindow::setupUi()
     auto* saveAct = tb->addAction(saveIcon, tr("Kaydet"));
     saveAct->setToolTip(tr("Farklı Kaydet (PDF)"));
     // Print button next to save (use theme icon if available)
-    QIcon printIcon = QIcon::fromTheme(QStringLiteral("document-print"));
-    auto* printAct = printIcon.isNull() ? tb->addAction(tr("Yazdır"))
-                                        : tb->addAction(printIcon, tr("Yazdır"));
+    auto* printAct = tb->addAction(tr("Yazdır"));
     printAct->setToolTip(tr("Yazdır"));
     
     // Page navigation
@@ -141,9 +139,7 @@ void MainWindow::setupUi()
     tb->addWidget(spacer);
 
     // FocusMode pin (raptiye) at far right
-    QIcon pinIcon = QIcon::fromTheme(QStringLiteral("pin"));
-    m_actFocusPin = pinIcon.isNull() ? tb->addAction(tr("📌"))
-                                     : tb->addAction(pinIcon, tr(""));
+    m_actFocusPin = tb->addAction(tr("📌"));
     m_actFocusPin->setCheckable(true);
     m_actFocusPin->setToolTip(tr("Raptiye: açıkken odak dışına çıkınca kapatma (pinned)"));
     connect(m_actFocusPin, &QAction::toggled, this, [this](bool on){
@@ -329,11 +325,7 @@ void MainWindow::openPdf(const QString& filePath)
     setWindowTitle(fi.fileName());
     updatePageCountLabel();
 
-    // After first event loop tick, switch to MultiPage + FitToWidth
-    QTimer::singleShot(0, this, [this]{
-        m_view->setPageMode(QPdfView::PageMode::MultiPage);
-        m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
-    });
+    // No progressive switch (avoid double render).
 
     // Load settings (e.g., pinned) after a document is opened
     loadSettings();
