@@ -22,9 +22,6 @@
 #include <QPainter>
 #include <QPrinter>
 #include <QPrintDialog>
-#include <QSettings>
-#include <QGuiApplication>
-#include <QSizePolicy>
 #include <QTimer>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -32,11 +29,6 @@ MainWindow::MainWindow(QWidget* parent)
 {
     setupUi();
     setupShortcuts();
-    // FocusMode: react to application activation changes
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState st){
-        if (m_focusMode && st != Qt::ApplicationActive)
-            qApp->quit();
-    });
 }
 
 void MainWindow::setupUi()
@@ -120,22 +112,7 @@ void MainWindow::setupUi()
     m_searchStatus->setAlignment(Qt::AlignCenter);
     tb->addWidget(m_searchStatus);
 
-    // Right spacer to push pin to the far right
-    auto* spacer = new QWidget(this);
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    tb->addWidget(spacer);
-
-    // FocusMode pin (raptiye) at far right
-    m_actFocusPin = tb->addAction(tr("📌"));
-    m_actFocusPin->setCheckable(true);
-    m_actFocusPin->setToolTip(tr("FocusMode: Pencere odak dışına çıkarsa uygulamayı kapat"));
-    connect(m_actFocusPin, &QAction::toggled, this, [this](bool on){
-        m_focusMode = on;
-        saveSettings();
-        if (m_focusMode && QGuiApplication::applicationState() != Qt::ApplicationActive)
-            qApp->quit();
-    });
-
+    // (Pin/FocusMode removed)
     // Debounced search init; model is created lazily on first need
     m_searchDebounce = new QTimer(this);
     m_searchDebounce->setSingleShot(true);
@@ -309,12 +286,20 @@ void MainWindow::openPdf(const QString& filePath)
     setWindowTitle(fi.fileName());
     updatePageCountLabel();
 
+<<<<<<< HEAD
     // No progressive switch (avoid double render).
 
     // Load settings (e.g., FocusMode) after a document is opened
     loadSettings();
     if (m_actFocusPin)
         m_actFocusPin->setChecked(m_focusMode);
+=======
+    // After first event loop tick, switch to MultiPage + FitToWidth
+    QTimer::singleShot(0, this, [this]{
+        m_view->setPageMode(QPdfView::PageMode::MultiPage);
+        m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
+    });
+>>>>>>> parent of 2d1102a (Ayarlar: FocusMode (raptiye). Odak kaybolunca uygulamayı kapat (toggle/persist settings.ini). Toolbar’ın en sağına raptiye eklendi.)
 }
 
 void MainWindow::updateSearchStatus()
@@ -381,19 +366,4 @@ void MainWindow::ensureSearchModel()
             m_view->setCurrentSearchResultIndex(-1);
         }
     });
-}
-
-void MainWindow::loadSettings()
-{
-    const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
-    QSettings s(iniPath, QSettings::IniFormat);
-    m_focusMode = s.value(QStringLiteral("FocusMode/Enabled"), false).toBool();
-}
-
-void MainWindow::saveSettings()
-{
-    const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
-    QSettings s(iniPath, QSettings::IniFormat);
-    s.setValue(QStringLiteral("FocusMode/Enabled"), m_focusMode);
-    s.sync();
 }
