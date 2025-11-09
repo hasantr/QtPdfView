@@ -71,6 +71,10 @@ void MainWindow::setupUi()
     tb->addSeparator();
 
     // Page selector
+    m_pageCountLabel = new QLabel(this);
+    m_pageCountLabel->setMinimumWidth(48);
+    m_pageCountLabel->setAlignment(Qt::AlignCenter);
+    tb->addWidget(m_pageCountLabel); // toplam sayfa sayısı solunda
     auto* pageSel = new QPdfPageSelector(this);
     pageSel->setDocument(m_doc);
     tb->addWidget(pageSel);
@@ -167,6 +171,8 @@ void MainWindow::setupUi()
         }
     });
     connect(m_view, &QPdfView::currentSearchResultIndexChanged, this, &MainWindow::updateSearchStatus);
+    // Page count label updates
+    connect(m_doc, &QPdfDocument::pageCountChanged, this, [this](int){ updatePageCountLabel(); });
 
     // Hook page selector <-> view navigator
     if (auto* nav = m_view->pageNavigator()) {
@@ -278,6 +284,7 @@ void MainWindow::openPdf(const QString& filePath)
     m_currentFilePath = fi.absoluteFilePath();
     m_currentFilePath = fi.absoluteFilePath();
     setWindowTitle(fi.fileName());
+    updatePageCountLabel();
 }
 
 void MainWindow::updateSearchStatus()
@@ -314,4 +321,11 @@ void MainWindow::jumpToSearchResult(int idx)
     }
     // Ensure the first match rectangle is visible within the page
     m_view->ensurePageRectVisible(link.page(), rects.first());
+}
+
+void MainWindow::updatePageCountLabel()
+{
+    if (!m_pageCountLabel) return;
+    const int pc = m_doc ? m_doc->pageCount() : 0;
+    m_pageCountLabel->setText(pc > 0 ? QString::number(pc) : QStringLiteral("-"));
 }

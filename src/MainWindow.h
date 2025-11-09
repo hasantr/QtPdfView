@@ -22,6 +22,7 @@ private:
     void setupShortcuts();
     void updateSearchStatus();
     void jumpToSearchResult(int idx);
+    void updatePageCountLabel();
 
     QPdfDocument* m_doc {nullptr};
     SelectablePdfView* m_view {nullptr};
@@ -31,4 +32,5 @@ private:
     QLabel* m_searchStatus {nullptr};
     QAction* m_actFindPrev {nullptr};
     QAction* m_actFindNext {nullptr};
+    QLabel* m_pageCountLabel {nullptr};
 };
