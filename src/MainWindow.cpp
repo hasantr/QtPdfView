@@ -126,6 +126,17 @@ void MainWindow::setupUi()
 
     // Status updates
     connect(m_searchModel, &QPdfSearchModel::countChanged, this, &MainWindow::updateSearchStatus);
+    // Ensure highlighting kicks in while typing: set current index to 0 when results appear
+    connect(m_searchModel, &QPdfSearchModel::countChanged, this, [this]{
+        const QString term = m_searchEdit ? m_searchEdit->text() : QString();
+        const int count = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
+        if (term.size() >= 2 && count > 0) {
+            if (m_view->currentSearchResultIndex() < 0)
+                m_view->setCurrentSearchResultIndex(0); // do not jump here
+        } else {
+            m_view->setCurrentSearchResultIndex(-1);
+        }
+    });
     connect(m_view, &QPdfView::currentSearchResultIndexChanged, this, &MainWindow::updateSearchStatus);
 
     // Hook page selector <-> view navigator
@@ -269,7 +280,11 @@ void MainWindow::jumpToSearchResult(int idx)
     const auto rects = link.rectangles();
     if (rects.isEmpty())
         return;
-    QPointF loc = rects.first().center();
+    QRectF r = rects.first();
+    qreal x = r.left() - 10.0;
+    qreal y = r.top() - 10.0;
+    if (x < 0) x = 0; if (y < 0) y = 0;
+    QPointF loc(x, y);
     if (auto* nav = m_view->pageNavigator())
         nav->jump(link.page(), loc, 0);
 }
