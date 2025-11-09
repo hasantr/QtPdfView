@@ -280,11 +280,6 @@ void MainWindow::jumpToSearchResult(int idx)
     const auto rects = link.rectangles();
     if (rects.isEmpty())
         return;
-    QRectF r = rects.first();
-    qreal x = r.left() - 10.0;
-    qreal y = r.top() - 10.0;
-    if (x < 0) x = 0; if (y < 0) y = 0;
-    QPointF loc(x, y);
     if (auto* nav = m_view->pageNavigator())
-        nav->jump(link.page(), loc, 0);
+        nav->jump(link);
 }
