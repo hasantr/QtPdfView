@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QString>
 
 class QLineEdit;
 class QPdfDocument;
@@ -22,4 +23,5 @@ private:
     SelectablePdfView* m_view {nullptr};
     QLineEdit* m_searchEdit {nullptr};
     QPdfSearchModel* m_searchModel {nullptr};
+    QString m_currentFilePath;
 };

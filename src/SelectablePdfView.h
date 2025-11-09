@@ -13,6 +13,8 @@ public:
     void clearSelection();
     bool copySelectionToClipboard();
     bool selectAllOnCurrentPage();
+    bool selectAllDocument();
+    bool copyAllDocumentToClipboard();
 
 protected:
     void paintEvent(QPaintEvent* ev) override;
@@ -33,4 +35,5 @@ private:
     QPointF m_dragEndViewport;
     std::optional<QPdfSelection> m_selection;
     int m_selectionPage {-1};
+    bool m_allDocSelected {false};
 };

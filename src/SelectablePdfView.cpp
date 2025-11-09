@@ -17,6 +17,7 @@ SelectablePdfView::SelectablePdfView(QWidget* parent)
 void SelectablePdfView::clearSelection()
 {
     m_selection.reset();
+    m_allDocSelected = false;
     viewport()->update();
 }
 
@@ -115,6 +116,8 @@ QPointF SelectablePdfView::contentToPagePointsFor(int page, const QPointF& pCont
 
 bool SelectablePdfView::copySelectionToClipboard()
 {
+    if (m_allDocSelected)
+        return copyAllDocumentToClipboard();
     if (!hasSelection())
         return false;
     m_selection->copyToClipboard();
@@ -128,8 +131,35 @@ bool SelectablePdfView::selectAllOnCurrentPage()
     const int page = pageNavigator()->currentPage();
     m_selection = document()->getAllText(page);
     m_selectionPage = page;
+    m_allDocSelected = false;
     viewport()->update();
     return hasSelection();
+}
+
+bool SelectablePdfView::selectAllDocument()
+{
+    // For visual feedback, select all on current page, but mark as whole-doc
+    const bool ok = selectAllOnCurrentPage();
+    m_allDocSelected = ok;
+    return ok;
+}
+
+bool SelectablePdfView::copyAllDocumentToClipboard()
+{
+    if (!document()) return false;
+    QString all;
+    all.reserve(4096);
+    const int pc = document()->pageCount();
+    for (int i = 0; i < pc; ++i) {
+        QPdfSelection sel = document()->getAllText(i);
+        if (sel.isValid()) {
+            if (!all.isEmpty()) all += QLatin1Char('\n');
+            all += sel.text();
+        }
+    }
+    if (all.isEmpty()) return false;
+    QGuiApplication::clipboard()->setText(all);
+    return true;
 }
 
 void SelectablePdfView::contextMenuEvent(QContextMenuEvent* ev)
@@ -138,6 +168,7 @@ void SelectablePdfView::contextMenuEvent(QContextMenuEvent* ev)
     QAction* actCopy = menu.addAction(tr("Kopyala"));
     actCopy->setEnabled(hasSelection());
     QAction* actSelectAll = menu.addAction(tr("Tümünü Seç (Bu Sayfa)"));
+    QAction* actSelectAllDoc = menu.addAction(tr("Tümünü Seç (Belge)"));
 
     QAction* chosen = menu.exec(ev->globalPos());
     if (!chosen) return;
@@ -145,6 +176,8 @@ void SelectablePdfView::contextMenuEvent(QContextMenuEvent* ev)
         copySelectionToClipboard();
     } else if (chosen == actSelectAll) {
         selectAllOnCurrentPage();
+    } else if (chosen == actSelectAllDoc) {
+        selectAllDocument();
     }
 }
 

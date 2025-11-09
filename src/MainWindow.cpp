@@ -4,6 +4,8 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QFileDialog>
+#include <QFile>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPdfDocument>
@@ -14,6 +16,7 @@
 #include "SelectablePdfView.h"
 #include <QShortcut>
 #include <QToolBar>
+#include <QStyle>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -38,6 +41,10 @@ void MainWindow::setupUi()
 
     auto* tb = addToolBar(tr("PDF"));
     tb->setMovable(false);
+
+    // Save As (PDF) first
+    QIcon saveIcon = style()->standardIcon(QStyle::SP_DialogSaveButton);
+    auto* saveAct = tb->addAction(saveIcon, tr("Kaydet"));
 
     // Page navigation
     auto* prevPage = tb->addAction(tr("Önceki"));
@@ -124,6 +131,22 @@ void MainWindow::setupUi()
     });
     connect(fitW, &QAction::triggered, this, [this]{ m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth); });
     connect(fitV, &QAction::triggered, this, [this]{ m_view->setZoomMode(QPdfView::ZoomMode::FitInView); });
+
+    // Save As action
+    connect(saveAct, &QAction::triggered, this, [this]{
+        if (m_currentFilePath.isEmpty()) {
+            QMessageBox::warning(this, tr("Kaydet"), tr("Mevcut dosya yolu bilinmiyor."));
+            return;
+        }
+        QString dest = QFileDialog::getSaveFileName(this, tr("Farklı Kaydet"),
+                                                    QDir::home().filePath(QFileInfo(m_currentFilePath).fileName()),
+                                                    tr("PDF Dosyaları (*.pdf)"));
+        if (dest.isEmpty()) return;
+        if (QFileInfo::exists(dest)) QFile::remove(dest);
+        if (!QFile::copy(m_currentFilePath, dest)) {
+            QMessageBox::critical(this, tr("Kaydet"), tr("Kaydetme başarısız: %1").arg(dest));
+        }
+    });
 }
 
 void MainWindow::setupShortcuts()
@@ -167,5 +190,6 @@ void MainWindow::openPdf(const QString& filePath)
         return;
     }
 
+    m_currentFilePath = fi.absoluteFilePath();
     setWindowTitle(fi.fileName());
 }
