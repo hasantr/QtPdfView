@@ -22,6 +22,9 @@
 #include <QPainter>
 #include <QPrinter>
 #include <QPrintDialog>
+#include <QSettings>
+#include <QGuiApplication>
+#include <QSizePolicy>
 #include <QTimer>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -29,6 +32,11 @@ MainWindow::MainWindow(QWidget* parent)
 {
     setupUi();
     setupShortcuts();
+    // FocusMode: react to application activation changes
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState st){
+        if (m_focusMode && st != Qt::ApplicationActive)
+            qApp->quit();
+    });
 }
 
 void MainWindow::setupUi()
@@ -113,6 +121,24 @@ void MainWindow::setupUi()
     m_searchStatus->setMinimumWidth(64);
     m_searchStatus->setAlignment(Qt::AlignCenter);
     tb->addWidget(m_searchStatus);
+
+    // Right spacer to push pin to the far right
+    auto* spacer = new QWidget(this);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    tb->addWidget(spacer);
+
+    // FocusMode pin (raptiye) at far right
+    QIcon pinIcon = QIcon::fromTheme(QStringLiteral("pin"));
+    m_actFocusPin = pinIcon.isNull() ? tb->addAction(tr("📌"))
+                                     : tb->addAction(pinIcon, tr(""));
+    m_actFocusPin->setCheckable(true);
+    m_actFocusPin->setToolTip(tr("FocusMode: Pencere odak dışına çıkarsa uygulamayı kapat"));
+    connect(m_actFocusPin, &QAction::toggled, this, [this](bool on){
+        m_focusMode = on;
+        saveSettings();
+        if (m_focusMode && QGuiApplication::applicationState() != Qt::ApplicationActive)
+            qApp->quit();
+    });
 
     // Debounced search init; model is created lazily on first need
     m_searchDebounce = new QTimer(this);
@@ -292,6 +318,11 @@ void MainWindow::openPdf(const QString& filePath)
         m_view->setPageMode(QPdfView::PageMode::MultiPage);
         m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
     });
+
+    // Load settings (e.g., FocusMode) after a document is opened
+    loadSettings();
+    if (m_actFocusPin)
+        m_actFocusPin->setChecked(m_focusMode);
 }
 
 void MainWindow::updateSearchStatus()
@@ -358,4 +389,19 @@ void MainWindow::ensureSearchModel()
             m_view->setCurrentSearchResultIndex(-1);
         }
     });
+}
+
+void MainWindow::loadSettings()
+{
+    const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
+    QSettings s(iniPath, QSettings::IniFormat);
+    m_focusMode = s.value(QStringLiteral("FocusMode/Enabled"), false).toBool();
+}
+
+void MainWindow::saveSettings()
+{
+    const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
+    QSettings s(iniPath, QSettings::IniFormat);
+    s.setValue(QStringLiteral("FocusMode/Enabled"), m_focusMode);
+    s.sync();
 }
