@@ -41,5 +41,6 @@ private:
     QTimer* m_searchDebounce {nullptr};
     bool m_searchInitialized {false};
     QAction* m_actFocusPin {nullptr};
-    bool m_focusMode {false};
+    bool m_pinned {false};
+    QTimer* m_focusCloseTimer {nullptr};
 };

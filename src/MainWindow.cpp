@@ -32,10 +32,23 @@ MainWindow::MainWindow(QWidget* parent)
 {
     setupUi();
     setupShortcuts();
-    // FocusMode: react to application activation changes
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState st){
-        if (m_focusMode && st != Qt::ApplicationActive)
+    // Focus close timer (200 ms)
+    m_focusCloseTimer = new QTimer(this);
+    m_focusCloseTimer->setSingleShot(true);
+    m_focusCloseTimer->setInterval(200);
+    connect(m_focusCloseTimer, &QTimer::timeout, this, [this]{
+        if (!m_pinned && QGuiApplication::applicationState() != Qt::ApplicationActive)
             qApp->quit();
+    });
+    // React to application activation changes with debounce
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState st){
+        if (!m_pinned && st != Qt::ApplicationActive) {
+            if (m_focusCloseTimer)
+                m_focusCloseTimer->start();
+        } else {
+            if (m_focusCloseTimer)
+                m_focusCloseTimer->stop();
+        }
     });
 }
 
@@ -132,12 +145,15 @@ void MainWindow::setupUi()
     m_actFocusPin = pinIcon.isNull() ? tb->addAction(tr("📌"))
                                      : tb->addAction(pinIcon, tr(""));
     m_actFocusPin->setCheckable(true);
-    m_actFocusPin->setToolTip(tr("FocusMode: Pencere odak dışına çıkarsa uygulamayı kapat"));
+    m_actFocusPin->setToolTip(tr("Raptiye: açıkken odak dışına çıkınca kapatma (pinned)"));
     connect(m_actFocusPin, &QAction::toggled, this, [this](bool on){
-        m_focusMode = on;
+        m_pinned = on; // pinned = stay open
         saveSettings();
-        if (m_focusMode && QGuiApplication::applicationState() != Qt::ApplicationActive)
-            qApp->quit();
+        if (!m_pinned && QGuiApplication::applicationState() != Qt::ApplicationActive) {
+            if (m_focusCloseTimer) m_focusCloseTimer->start();
+        } else {
+            if (m_focusCloseTimer) m_focusCloseTimer->stop();
+        }
     });
 
     // Debounced search init; model is created lazily on first need
@@ -319,10 +335,10 @@ void MainWindow::openPdf(const QString& filePath)
         m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
     });
 
-    // Load settings (e.g., FocusMode) after a document is opened
+    // Load settings (e.g., pinned) after a document is opened
     loadSettings();
     if (m_actFocusPin)
-        m_actFocusPin->setChecked(m_focusMode);
+        m_actFocusPin->setChecked(m_pinned);
 }
 
 void MainWindow::updateSearchStatus()
@@ -395,13 +411,21 @@ void MainWindow::loadSettings()
 {
     const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
     QSettings s(iniPath, QSettings::IniFormat);
-    m_focusMode = s.value(QStringLiteral("FocusMode/Enabled"), false).toBool();
+    // New key: FocusMode/Pinned. Fallback: invert old FocusMode/Enabled if present.
+    if (s.contains(QStringLiteral("FocusMode/Pinned"))) {
+        m_pinned = s.value(QStringLiteral("FocusMode/Pinned"), false).toBool();
+    } else {
+        bool oldEnabled = s.value(QStringLiteral("FocusMode/Enabled"), false).toBool();
+        m_pinned = !oldEnabled;
+    }
 }
 
 void MainWindow::saveSettings()
 {
     const QString iniPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("settings.ini"));
     QSettings s(iniPath, QSettings::IniFormat);
-    s.setValue(QStringLiteral("FocusMode/Enabled"), m_focusMode);
+    s.setValue(QStringLiteral("FocusMode/Pinned"), m_pinned);
+    // Also write old key inverted for compatibility
+    s.setValue(QStringLiteral("FocusMode/Enabled"), !m_pinned);
     s.sync();
 }
