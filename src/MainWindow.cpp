@@ -9,6 +9,8 @@
 #include <QPdfDocument>
 #include <QPdfView>
 #include <QPdfSearchModel>
+#include <QPdfPageNavigator>
+#include <QPdfPageSelector>
 #include "SelectablePdfView.h"
 #include <QShortcut>
 #include <QToolBar>
@@ -34,13 +36,34 @@ void MainWindow::setupUi()
 
     setCentralWidget(m_view);
 
-    auto* tb = addToolBar(tr("Ara"));
+    auto* tb = addToolBar(tr("PDF"));
     tb->setMovable(false);
 
+    // Page navigation
+    auto* prevPage = tb->addAction(tr("Önceki"));
+    auto* nextPage = tb->addAction(tr("Sonraki"));
+    tb->addSeparator();
+
+    // Page selector
+    auto* pageSel = new QPdfPageSelector(this);
+    pageSel->setDocument(m_doc);
+    tb->addWidget(pageSel);
+    tb->addSeparator();
+
+    // Zoom controls
+    auto* zoomOut = tb->addAction(tr("-"));
+    auto* zoomIn  = tb->addAction(tr("+"));
+    auto* fitW    = tb->addAction(tr("Genişlik"));
+    auto* fitV    = tb->addAction(tr("Sayfa"));
+    tb->addSeparator();
+
+    // Search box and nav
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setClearButtonEnabled(true);
-    m_searchEdit->setPlaceholderText(tr("Ara (Enter ile vurgula)"));
+    m_searchEdit->setPlaceholderText(tr("Ara (Enter: sonraki)"));
     tb->addWidget(m_searchEdit);
+    auto* findPrev = tb->addAction(tr("←"));
+    auto* findNext = tb->addAction(tr("→"));
 
     // Search model highlights matches inside the view
     m_searchModel = new QPdfSearchModel(this);
@@ -57,6 +80,50 @@ void MainWindow::setupUi()
         idx = (idx + 1) % count;
         m_view->setCurrentSearchResultIndex(idx);
     });
+
+    connect(findNext, &QAction::triggered, this, [this]{
+        int count = m_searchModel->rowCount(QModelIndex());
+        if (count <= 0) return;
+        int idx = (m_view->currentSearchResultIndex() + 1) % count;
+        m_view->setCurrentSearchResultIndex(idx);
+    });
+    connect(findPrev, &QAction::triggered, this, [this]{
+        int count = m_searchModel->rowCount(QModelIndex());
+        if (count <= 0) return;
+        int idx = m_view->currentSearchResultIndex();
+        idx = (idx - 1 + count) % count;
+        m_view->setCurrentSearchResultIndex(idx);
+    });
+
+    // Hook page selector <-> view navigator
+    if (auto* nav = m_view->pageNavigator()) {
+        connect(nav, &QPdfPageNavigator::currentPageChanged, pageSel, &QPdfPageSelector::setCurrentPage);
+        connect(pageSel, &QPdfPageSelector::currentPageChanged, this, [this, nav](int p){ nav->jump(p, QPointF(0,0)); });
+    }
+
+    // Navigation actions
+    connect(prevPage, &QAction::triggered, this, [this]{
+        if (!m_doc || !m_view->pageNavigator()) return;
+        int p = m_view->pageNavigator()->currentPage();
+        if (p > 0) m_view->pageNavigator()->jump(p - 1, QPointF(0,0));
+    });
+    connect(nextPage, &QAction::triggered, this, [this]{
+        if (!m_doc || !m_view->pageNavigator()) return;
+        int p = m_view->pageNavigator()->currentPage();
+        if (p + 1 < m_doc->pageCount()) m_view->pageNavigator()->jump(p + 1, QPointF(0,0));
+    });
+
+    // Zoom actions
+    connect(zoomIn, &QAction::triggered, this, [this]{
+        m_view->setZoomMode(QPdfView::ZoomMode::Custom);
+        m_view->setZoomFactor(m_view->zoomFactor() * 1.25);
+    });
+    connect(zoomOut, &QAction::triggered, this, [this]{
+        m_view->setZoomMode(QPdfView::ZoomMode::Custom);
+        m_view->setZoomFactor(m_view->zoomFactor() / 1.25);
+    });
+    connect(fitW, &QAction::triggered, this, [this]{ m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth); });
+    connect(fitV, &QAction::triggered, this, [this]{ m_view->setZoomMode(QPdfView::ZoomMode::FitInView); });
 }
 
 void MainWindow::setupShortcuts()

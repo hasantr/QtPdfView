@@ -2,6 +2,8 @@
 
 #include <QAbstractItemModel>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QPainter>
 #include <QPdfDocument>
 #include <QPdfPageNavigator>
@@ -117,6 +119,33 @@ bool SelectablePdfView::copySelectionToClipboard()
         return false;
     m_selection->copyToClipboard();
     return true;
+}
+
+bool SelectablePdfView::selectAllOnCurrentPage()
+{
+    if (!document() || !pageNavigator())
+        return false;
+    const int page = pageNavigator()->currentPage();
+    m_selection = document()->getAllText(page);
+    m_selectionPage = page;
+    viewport()->update();
+    return hasSelection();
+}
+
+void SelectablePdfView::contextMenuEvent(QContextMenuEvent* ev)
+{
+    QMenu menu(this);
+    QAction* actCopy = menu.addAction(tr("Kopyala"));
+    actCopy->setEnabled(hasSelection());
+    QAction* actSelectAll = menu.addAction(tr("Tümünü Seç (Bu Sayfa)"));
+
+    QAction* chosen = menu.exec(ev->globalPos());
+    if (!chosen) return;
+    if (chosen == actCopy) {
+        copySelectionToClipboard();
+    } else if (chosen == actSelectAll) {
+        selectAllOnCurrentPage();
+    }
 }
 
 void SelectablePdfView::mousePressEvent(QMouseEvent* ev)

@@ -12,12 +12,14 @@ public:
     bool hasSelection() const { return m_selection.has_value() && m_selection->isValid(); }
     void clearSelection();
     bool copySelectionToClipboard();
+    bool selectAllOnCurrentPage();
 
 protected:
     void paintEvent(QPaintEvent* ev) override;
     void mousePressEvent(QMouseEvent* ev) override;
     void mouseMoveEvent(QMouseEvent* ev) override;
     void mouseReleaseEvent(QMouseEvent* ev) override;
+    void contextMenuEvent(QContextMenuEvent* ev) override;
 
 private:
     qreal currentScale() const; // page points -> pixels
