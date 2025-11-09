@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QLabel>
+#include <QIcon>
 #include <QPdfDocument>
 #include <QPdfView>
 #include <QPdfSearchModel>
@@ -45,16 +46,28 @@ void MainWindow::setupUi()
 
     auto* tb = addToolBar(tr("PDF"));
     tb->setMovable(false);
+    tb->setIconSize(QSize(20, 20));
+    tb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
     // Save As (PDF) first
     QIcon saveIcon = style()->standardIcon(QStyle::SP_DialogSaveButton);
     auto* saveAct = tb->addAction(saveIcon, tr("Kaydet"));
-    // Print button next to save
-    auto* printAct = tb->addAction(tr("Yazdır"));
+    saveAct->setToolTip(tr("Farklı Kaydet (PDF)"));
+    // Print button next to save (use theme icon if available)
+    QIcon printIcon = QIcon::fromTheme(QStringLiteral("document-print"));
+    auto* printAct = printIcon.isNull() ? tb->addAction(tr("Yazdır"))
+                                        : tb->addAction(printIcon, tr("Yazdır"));
+    printAct->setToolTip(tr("Yazdır"));
     
     // Page navigation
-    auto* prevPage = tb->addAction(tr("Önceki"));
-    auto* nextPage = tb->addAction(tr("Sonraki"));
+    QIcon prevIcon = style()->standardIcon(QStyle::SP_ArrowBack);
+    QIcon nextIcon = style()->standardIcon(QStyle::SP_ArrowForward);
+    auto* prevPage = tb->addAction(prevIcon, tr("Önceki"));
+    auto* nextPage = tb->addAction(nextIcon, tr("Sonraki"));
+    prevPage->setShortcut(Qt::Key_PageUp);
+    nextPage->setShortcut(Qt::Key_PageDown);
+    prevPage->setToolTip(tr("Önceki Sayfa (PgUp)"));
+    nextPage->setToolTip(tr("Sonraki Sayfa (PgDn)"));
     tb->addSeparator();
 
     // Page selector
@@ -64,10 +77,18 @@ void MainWindow::setupUi()
     tb->addSeparator();
 
     // Zoom controls
-    auto* zoomOut = tb->addAction(tr("-"));
-    auto* zoomIn  = tb->addAction(tr("+"));
+    QIcon zoomOutIcon = style()->standardIcon(QStyle::SP_ArrowDown);
+    QIcon zoomInIcon  = style()->standardIcon(QStyle::SP_ArrowUp);
+    auto* zoomOut = tb->addAction(zoomOutIcon, tr("-"));
+    auto* zoomIn  = tb->addAction(zoomInIcon,  tr("+"));
+    zoomIn->setShortcut(QKeySequence::ZoomIn);
+    zoomOut->setShortcut(QKeySequence::ZoomOut);
+    zoomIn->setToolTip(tr("Yakınlaştır (Ctrl +)"));
+    zoomOut->setToolTip(tr("Uzaklaştır (Ctrl -)"));
     auto* fitW    = tb->addAction(tr("Genişlik"));
     auto* fitV    = tb->addAction(tr("Sayfa"));
+    fitW->setToolTip(tr("Genişliğe Sığdır"));
+    fitV->setToolTip(tr("Sayfaya Sığdır"));
     tb->addSeparator();
 
     // Search box and nav
@@ -75,9 +96,17 @@ void MainWindow::setupUi()
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->setPlaceholderText(tr("Ara (min 2 karakter)"));
     tb->addWidget(m_searchEdit);
-    m_actFindPrev = tb->addAction(tr("←"));
-    m_actFindNext = tb->addAction(tr("→"));
+    QIcon findPrevIcon = style()->standardIcon(QStyle::SP_MediaSkipBackward);
+    QIcon findNextIcon = style()->standardIcon(QStyle::SP_MediaSkipForward);
+    m_actFindPrev = tb->addAction(findPrevIcon, QString());
+    m_actFindNext = tb->addAction(findNextIcon, QString());
+    m_actFindNext->setShortcut(QKeySequence::FindNext);
+    m_actFindPrev->setShortcut(QKeySequence::FindPrevious);
+    m_actFindNext->setToolTip(tr("Sonraki eşleşme (F3)"));
+    m_actFindPrev->setToolTip(tr("Önceki eşleşme (Shift+F3)"));
     m_searchStatus = new QLabel(tr("0 sonuç"), this);
+    m_searchStatus->setMinimumWidth(64);
+    m_searchStatus->setAlignment(Qt::AlignCenter);
     tb->addWidget(m_searchStatus);
 
     // Search model highlights matches inside the view
