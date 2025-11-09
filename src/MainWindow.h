@@ -7,6 +7,8 @@ class QLineEdit;
 class QPdfDocument;
 class SelectablePdfView;
 class QPdfSearchModel;
+class QLabel;
+class QAction;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -18,10 +20,14 @@ public:
 private:
     void setupUi();
     void setupShortcuts();
+    void updateSearchStatus();
 
     QPdfDocument* m_doc {nullptr};
     SelectablePdfView* m_view {nullptr};
     QLineEdit* m_searchEdit {nullptr};
     QPdfSearchModel* m_searchModel {nullptr};
     QString m_currentFilePath;
+    QLabel* m_searchStatus {nullptr};
+    QAction* m_actFindPrev {nullptr};
+    QAction* m_actFindNext {nullptr};
 };

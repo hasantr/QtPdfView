@@ -9,7 +9,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Pdf PdfWidgets)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Pdf PdfWidgets PrintSupport)
 
 add_executable(QtPdfView
     src/main.cpp
@@ -19,7 +19,7 @@ add_executable(QtPdfView
     src/SelectablePdfView.cpp
 )
 
-target_link_libraries(QtPdfView PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets)
+target_link_libraries(QtPdfView PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets Qt6::PrintSupport)
 
 if(WIN32)
   # Avoid console window on Windows for GUI app

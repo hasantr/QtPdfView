@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QLabel>
 #include <QPdfDocument>
 #include <QPdfView>
 #include <QPdfSearchModel>
@@ -17,6 +18,9 @@
 #include <QShortcut>
 #include <QToolBar>
 #include <QStyle>
+#include <QPainter>
+#include <QPrinter>
+#include <QPrintDialog>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -45,7 +49,9 @@ void MainWindow::setupUi()
     // Save As (PDF) first
     QIcon saveIcon = style()->standardIcon(QStyle::SP_DialogSaveButton);
     auto* saveAct = tb->addAction(saveIcon, tr("Kaydet"));
-
+    // Print button next to save
+    auto* printAct = tb->addAction(tr("Yazdır"));
+    
     // Page navigation
     auto* prevPage = tb->addAction(tr("Önceki"));
     auto* nextPage = tb->addAction(tr("Sonraki"));
@@ -67,16 +73,26 @@ void MainWindow::setupUi()
     // Search box and nav
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setClearButtonEnabled(true);
-    m_searchEdit->setPlaceholderText(tr("Ara (Enter: sonraki)"));
+    m_searchEdit->setPlaceholderText(tr("Ara (min 2 karakter)"));
     tb->addWidget(m_searchEdit);
-    auto* findPrev = tb->addAction(tr("←"));
-    auto* findNext = tb->addAction(tr("→"));
+    m_actFindPrev = tb->addAction(tr("←"));
+    m_actFindNext = tb->addAction(tr("→"));
+    m_searchStatus = new QLabel(tr("0 sonuç"), this);
+    tb->addWidget(m_searchStatus);
 
     // Search model highlights matches inside the view
     m_searchModel = new QPdfSearchModel(this);
     m_searchModel->setDocument(m_doc);
     m_view->setSearchModel(m_searchModel);
-    connect(m_searchEdit, &QLineEdit::textChanged, m_searchModel, &QPdfSearchModel::setSearchString);
+    connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString& txt){
+        if (txt.size() >= 2) {
+            m_searchModel->setSearchString(txt);
+        } else {
+            m_searchModel->setSearchString(QString());
+            m_view->setCurrentSearchResultIndex(-1);
+        }
+        updateSearchStatus();
+    });
 
     // Navigate between matches with Enter/Shift+Enter
     connect(m_searchEdit, &QLineEdit::returnPressed, this, [this]{
@@ -86,21 +102,28 @@ void MainWindow::setupUi()
         int idx = m_view->currentSearchResultIndex();
         idx = (idx + 1) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        updateSearchStatus();
     });
 
-    connect(findNext, &QAction::triggered, this, [this]{
+    connect(m_actFindNext, &QAction::triggered, this, [this]{
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0) return;
         int idx = (m_view->currentSearchResultIndex() + 1) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        updateSearchStatus();
     });
-    connect(findPrev, &QAction::triggered, this, [this]{
+    connect(m_actFindPrev, &QAction::triggered, this, [this]{
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0) return;
         int idx = m_view->currentSearchResultIndex();
         idx = (idx - 1 + count) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        updateSearchStatus();
     });
+
+    // Status updates
+    connect(m_searchModel, &QPdfSearchModel::countChanged, this, &MainWindow::updateSearchStatus);
+    connect(m_view, &QPdfView::currentSearchResultIndexChanged, this, &MainWindow::updateSearchStatus);
 
     // Hook page selector <-> view navigator
     if (auto* nav = m_view->pageNavigator()) {
@@ -147,6 +170,25 @@ void MainWindow::setupUi()
             QMessageBox::critical(this, tr("Kaydet"), tr("Kaydetme başarısız: %1").arg(dest));
         }
     });
+
+    // Print action (render each page to printer)
+    connect(printAct, &QAction::triggered, this, [this]{
+        if (!m_doc || m_doc->pageCount() <= 0) return;
+        QPrinter printer(QPrinter::HighResolution);
+        QPrintDialog dlg(&printer, this);
+        if (dlg.exec() != QDialog::Accepted) return;
+        QPainter painter(&printer);
+        if (!painter.isActive()) return;
+        const int pageCount = m_doc->pageCount();
+        for (int i = 0; i < pageCount; ++i) {
+            const QSize target = painter.viewport().size();
+            if (target.isEmpty()) break;
+            QImage img = m_doc->render(i, target);
+            painter.drawImage(QPoint(0,0), img);
+            if (i + 1 < pageCount)
+                printer.newPage();
+        }
+    });
 }
 
 void MainWindow::setupShortcuts()
@@ -191,5 +233,23 @@ void MainWindow::openPdf(const QString& filePath)
     }
 
     m_currentFilePath = fi.absoluteFilePath();
+    m_currentFilePath = fi.absoluteFilePath();
     setWindowTitle(fi.fileName());
+}
+
+void MainWindow::updateSearchStatus()
+{
+    if (!m_searchStatus) return;
+    const QString term = m_searchEdit ? m_searchEdit->text() : QString();
+    const int count = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
+    const int idx = m_view ? m_view->currentSearchResultIndex() : -1;
+    if (term.size() < 2 || count <= 0) {
+        m_searchStatus->setText(tr("0 sonuç"));
+        if (m_actFindPrev) m_actFindPrev->setEnabled(false);
+        if (m_actFindNext) m_actFindNext->setEnabled(false);
+        return;
+    }
+    m_searchStatus->setText(QString::fromLatin1("%1/%2").arg(idx >= 0 ? idx + 1 : 0).arg(count));
+    if (m_actFindPrev) m_actFindPrev->setEnabled(true);
+    if (m_actFindNext) m_actFindNext->setEnabled(true);
 }
