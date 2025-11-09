@@ -21,6 +21,7 @@ private:
     void setupUi();
     void setupShortcuts();
     void updateSearchStatus();
+    void jumpToSearchResult(int idx);
 
     QPdfDocument* m_doc {nullptr};
     SelectablePdfView* m_view {nullptr};

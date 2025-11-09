@@ -102,6 +102,7 @@ void MainWindow::setupUi()
         int idx = m_view->currentSearchResultIndex();
         idx = (idx + 1) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        jumpToSearchResult(idx);
         updateSearchStatus();
     });
 
@@ -110,6 +111,7 @@ void MainWindow::setupUi()
         if (count <= 0) return;
         int idx = (m_view->currentSearchResultIndex() + 1) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        jumpToSearchResult(idx);
         updateSearchStatus();
     });
     connect(m_actFindPrev, &QAction::triggered, this, [this]{
@@ -118,6 +120,7 @@ void MainWindow::setupUi()
         int idx = m_view->currentSearchResultIndex();
         idx = (idx - 1 + count) % count;
         m_view->setCurrentSearchResultIndex(idx);
+        jumpToSearchResult(idx);
         updateSearchStatus();
     });
 
@@ -252,4 +255,21 @@ void MainWindow::updateSearchStatus()
     m_searchStatus->setText(QString::fromLatin1("%1/%2").arg(idx >= 0 ? idx + 1 : 0).arg(count));
     if (m_actFindPrev) m_actFindPrev->setEnabled(true);
     if (m_actFindNext) m_actFindNext->setEnabled(true);
+}
+
+void MainWindow::jumpToSearchResult(int idx)
+{
+    if (!m_searchModel || !m_view)
+        return;
+    if (idx < 0)
+        return;
+    QPdfLink link = m_searchModel->resultAtIndex(idx);
+    if (!link.isValid())
+        return;
+    const auto rects = link.rectangles();
+    if (rects.isEmpty())
+        return;
+    QPointF loc = rects.first().center();
+    if (auto* nav = m_view->pageNavigator())
+        nav->jump(link.page(), loc, 0);
 }
