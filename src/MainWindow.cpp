@@ -278,8 +278,11 @@ void MainWindow::jumpToSearchResult(int idx)
     if (!link.isValid())
         return;
     const auto rects = link.rectangles();
-    if (rects.isEmpty())
+    if (rects.isEmpty()) {
+        if (auto* nav = m_view->pageNavigator())
+            nav->jump(link);
         return;
-    if (auto* nav = m_view->pageNavigator())
-        nav->jump(link);
+    }
+    // Ensure the first match rectangle is visible within the page
+    m_view->ensurePageRectVisible(link.page(), rects.first());
 }

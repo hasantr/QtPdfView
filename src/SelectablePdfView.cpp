@@ -8,6 +8,7 @@
 #include <QPdfDocument>
 #include <QPdfPageNavigator>
 #include <QScrollBar>
+#include <QtMath>
 
 SelectablePdfView::SelectablePdfView(QWidget* parent)
     : QPdfView(parent)
@@ -179,6 +180,39 @@ void SelectablePdfView::contextMenuEvent(QContextMenuEvent* ev)
     } else if (chosen == actSelectAllDoc) {
         selectAllDocument();
     }
+}
+
+void SelectablePdfView::ensurePageRectVisible(int page, const QRectF& rect, int margin)
+{
+    if (!document()) return;
+    const qreal s = currentScale();
+    const auto m = documentMargins();
+    const qreal yOff = pageOffsetY(page);
+
+    QRectF rPx(m.left() + rect.left() * s,
+               m.top() + yOff + rect.top() * s,
+               rect.width() * s,
+               rect.height() * s);
+    rPx.adjust(-margin, -margin, margin, margin);
+
+    const int vw = viewport()->width();
+    const int vh = viewport()->height();
+    int hVal = horizontalScrollBar()->value();
+    int vVal = verticalScrollBar()->value();
+
+    if (rPx.left() < hVal)
+        hVal = int(std::floor(rPx.left()));
+    else if (rPx.right() > hVal + vw)
+        hVal = int(std::ceil(rPx.right() - vw));
+
+    if (rPx.top() < vVal)
+        vVal = int(std::floor(rPx.top()));
+    else if (rPx.bottom() > vVal + vh)
+        vVal = int(std::ceil(rPx.bottom() - vh));
+
+    horizontalScrollBar()->setValue(hVal);
+    verticalScrollBar()->setValue(vVal);
+    viewport()->update();
 }
 
 void SelectablePdfView::mousePressEvent(QMouseEvent* ev)

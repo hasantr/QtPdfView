@@ -15,6 +15,7 @@ public:
     bool selectAllOnCurrentPage();
     bool selectAllDocument();
     bool copyAllDocumentToClipboard();
+    void ensurePageRectVisible(int page, const QRectF& rect, int margin = 16);
 
 protected:
     void paintEvent(QPaintEvent* ev) override;
