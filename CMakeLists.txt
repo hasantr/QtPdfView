@@ -14,7 +14,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Pdf PdfWidgets PrintSupport)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Pdf PdfWidgets PrintSupport Network)
 
 add_executable(QtPdfView
     src/main.cpp
@@ -22,9 +22,15 @@ add_executable(QtPdfView
     src/MainWindow.cpp
     src/SelectablePdfView.h
     src/SelectablePdfView.cpp
+    src/MiniMapWidget.h
+    src/MiniMapWidget.cpp
+    src/SecretSearchPanel.h
+    src/SecretSearchPanel.cpp
+    resources/icons.qrc
+    $<$<PLATFORM_ID:Windows>:app.rc>
 )
 
-target_link_libraries(QtPdfView PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets Qt6::PrintSupport)
+target_link_libraries(QtPdfView PRIVATE Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets Qt6::PrintSupport Qt6::Network)
 
 if(WIN32)
   # Avoid console window on Windows for GUI app

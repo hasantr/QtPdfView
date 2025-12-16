@@ -1,0 +1,22 @@
+<RCC>
+  <qresource prefix="/icons">
+    <file alias="add.svg">icons/add.svg</file>
+    <file alias="backfind.svg">icons/backfind.svg</file>
+    <file alias="backpage.svg">icons/backpage.svg</file>
+    <file alias="block.svg">icons/block.svg</file>
+    <file alias="copy-all.svg">icons/copy-all.svg</file>
+    <file alias="email.svg">icons/email.svg</file>
+    <file alias="nextfind.svg">icons/nextfind.svg</file>
+    <file alias="nextpage.svg">icons/nextpage.svg</file>
+    <file alias="page.svg">icons/page.svg</file>
+    <file alias="pages.svg">icons/pages.svg</file>
+    <file alias="pageview.svg">icons/pageview.svg</file>
+    <file alias="width.svg">icons/width.svg</file>
+    <file alias="print.svg">icons/print.svg</file>
+    <file alias="save.svg">icons/save.svg</file>
+    <file alias="search.svg">icons/search.svg</file>
+    <file alias="zoomout.svg">icons/zoomout.svg</file>
+    <file alias="pdf.ico">icons/pdf.ico</file>
+    <file alias="udf.ico">icons/udf.ico</file>
+  </qresource>
+</RCC>

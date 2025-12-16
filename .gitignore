@@ -18,6 +18,7 @@ cmake_install.cmake
 *.qmlproject.user
 .vs/
 .vscode/
+.qtcreator/
 
 # Ninja
 *.ninja
@@ -36,3 +37,15 @@ cmake_install.cmake
 
 # Logs
 *.log
+
+# Test/temp files
+nul
+*.pdf
+
+# Claude Code
+.claude/
+
+# Unused folders
+pdfviewer/
+pdfviewerresources/
+Icons/
