@@ -1,3 +1,8 @@
+/**
+ * @file MainWindow.cpp
+ * @brief Implementation of the main application window.
+ */
+
 #include "MainWindow.h"
 
 #include <QAction>
@@ -20,7 +25,7 @@
 #include <QPdfPageNavigator>
 #include <QPdfPageSelector>
 #include "SelectablePdfView.h"
-#include "SecretSearchPanel.h"
+#include "SearchMinimapPanel.h"
 #include <QShortcut>
 #include <QToolBar>
 #include <QStyle>
@@ -41,6 +46,13 @@
 #include <QMimeData>
 
 namespace {
+/**
+ * @brief Custom style to disable transient (auto-hiding) scrollbars.
+ *
+ * Some platforms show scrollbars that fade away when not in use.
+ * This style hint override forces scrollbars to always be visible,
+ * which is necessary for the search minimap overlay to work properly.
+ */
 class NoTransientScrollBarStyle : public QProxyStyle {
 public:
     using QProxyStyle::QProxyStyle;
@@ -50,7 +62,7 @@ public:
                   QStyleHintReturn* returnData = nullptr) const override
     {
         if (hint == QStyle::SH_ScrollBar_Transient)
-            return 0;
+            return 0;  // Disable transient scrollbars
         return QProxyStyle::styleHint(hint, option, widget, returnData);
     }
 };
@@ -62,23 +74,24 @@ MainWindow::MainWindow(QWidget* parent)
     setAcceptDrops(true);
     setupUi();
     setupThumbnailPanel();
-    setupSecretSearchPanel();
+    setupSearchMinimap();
     setupShortcuts();
 }
 
-void MainWindow::triggerAdvancedMinimapSearch(const QString& terms)
+void MainWindow::triggerMultiTermSearch(const QString& terms)
 {
-    runSecretSearch(terms);
+    runMultiTermSearch(terms);
 }
 
 void MainWindow::setupUi()
 {
+    // Initialize PDF document and view
     m_doc = new QPdfDocument(this);
     m_view = new SelectablePdfView(this);
     m_view->setDocument(m_doc);
     m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
 
-    // Favor fast, simple rendering but show all pages
+    // Configure view for fast rendering with all pages visible
     m_view->setPageMode(QPdfView::PageMode::MultiPage);
     m_view->setZoomMode(QPdfView::ZoomMode::FitToWidth);
     m_view->setPageSpacing(0);
@@ -86,6 +99,7 @@ void MainWindow::setupUi()
 
     setCentralWidget(m_view);
 
+    // Style the scrollbar for minimap overlay
     m_verticalScrollBar = m_view->verticalScrollBar();
     if (m_verticalScrollBar) {
         m_verticalScrollBar->setMinimumWidth(26);
@@ -96,13 +110,15 @@ void MainWindow::setupUi()
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"));
     }
 
+    // Create search minimap panel on scrollbar
     QWidget* minimapParent = m_verticalScrollBar ? static_cast<QWidget*>(m_verticalScrollBar) : m_view;
-    m_secretPanel = new SecretSearchPanel(minimapParent);
-    m_secretPanel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    m_secretPanel->setStyleSheet(QStringLiteral("background: transparent;"));
-    m_secretPanel->show();
+    m_minimapPanel = new SearchMinimapPanel(minimapParent);
+    m_minimapPanel->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_minimapPanel->setStyleSheet(QStringLiteral("background: transparent;"));
+    m_minimapPanel->show();
     positionFloatingMinimap();
 
+    // Connect scrollbar signals to update minimap viewport
     if (m_verticalScrollBar) {
         connect(m_verticalScrollBar, &QScrollBar::valueChanged, this, [this](int){
             updateViewportOverlay();
@@ -118,16 +134,19 @@ void MainWindow::setupUi()
         updateViewportOverlay();
     });
 
+    // Search debounce timer to avoid excessive searches while typing
     m_searchDebounce = new QTimer(this);
     m_searchDebounce->setSingleShot(true);
     m_searchDebounce->setInterval(320);
 
+    // Create toolbar
     m_toolbar = addToolBar(tr("PDF"));
     auto* tb = m_toolbar;
     tb->setMovable(false);
     tb->setIconSize(QSize(20, 20));
     tb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
+    // Helper to load icon with fallback
     auto iconOrFallback = [this](const char* path, QStyle::StandardPixmap fallback) -> QIcon {
         QIcon icon{QLatin1String(path)};
         if (icon.isNull())
@@ -135,7 +154,7 @@ void MainWindow::setupUi()
         return icon;
     };
 
-    // "Open" button (opens original file with system default app) - initially hidden
+    // "Open" button - opens original file with system default app (initially hidden)
     m_openOriginalAct = tb->addAction(QIcon(), tr("Open"));
     m_openOriginalAct->setToolTip(tr("Open original file with default application"));
     m_openOriginalAct->setVisible(false);
@@ -155,20 +174,22 @@ void MainWindow::setupUi()
     m_toggleThumbnails->setToolTip(tr("Show/Hide Page Thumbnails"));
     tb->addSeparator();
 
-    // Save As (PDF) first
+    // Save As button
     QIcon saveIcon = iconOrFallback(":/icons/save.svg", QStyle::SP_DialogSaveButton);
     auto* saveAct = tb->addAction(saveIcon, tr("Save"));
     saveAct->setToolTip(tr("Save As (PDF)"));
-    // Print button next to save (use theme icon if available)
+
+    // Print button
     QIcon printIcon = iconOrFallback(":/icons/print.svg", QStyle::SP_FileDialogDetailedView);
     auto* printAct = tb->addAction(printIcon, tr("Print"));
     printAct->setToolTip(tr("Print"));
-    // Mail button (system mail client)
+
+    // Email button
     QIcon mailIcon = iconOrFallback(":/icons/email.svg", QStyle::SP_DialogOpenButton);
     auto* mailAct = tb->addAction(mailIcon, tr("Email"));
     mailAct->setToolTip(tr("Share via default email application"));
-    
-    // Page navigation
+
+    // Page navigation buttons
     QIcon prevIcon = iconOrFallback(":/icons/backpage.svg", QStyle::SP_ArrowBack);
     QIcon nextIcon = iconOrFallback(":/icons/nextpage.svg", QStyle::SP_ArrowForward);
     auto* prevPage = tb->addAction(prevIcon, QString());
@@ -178,7 +199,7 @@ void MainWindow::setupUi()
     prevPage->setToolTip(tr("Previous Page (PgUp)"));
     nextPage->setToolTip(tr("Next Page (PgDn)"));
 
-    // Page selector
+    // Page count label and selector
     m_pageCountLabel = new QLabel(this);
     m_pageCountLabel->setMinimumWidth(48);
     m_pageCountLabel->setAlignment(Qt::AlignCenter);
@@ -205,7 +226,7 @@ void MainWindow::setupUi()
     fitV->setToolTip(tr("Fit to Page"));
     tb->addSeparator();
 
-    // Search box and nav
+    // Search box and navigation
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->setPlaceholderText(tr("Search (min 2 chars)"));
@@ -223,10 +244,12 @@ void MainWindow::setupUi()
     m_searchStatus->setAlignment(Qt::AlignCenter);
     tb->addWidget(m_searchStatus);
 
-    // Search model highlights matches inside the view
+    // Setup search model for highlighting matches
     m_searchModel = new QPdfSearchModel(this);
     m_searchModel->setDocument(m_doc);
     m_view->setSearchModel(m_searchModel);
+
+    // Debounced search while typing
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this](const QString&){
         if (m_searchDebounce)
             m_searchDebounce->start();
@@ -236,17 +259,17 @@ void MainWindow::setupUi()
             const QString txt = m_searchEdit ? m_searchEdit->text() : QString();
             if (txt.size() >= 2) {
                 m_searchModel->setSearchString(txt);
-                updateNormalSearchMinimap(txt);
+                updateSearchMinimap(txt);
             } else {
                 m_searchModel->setSearchString(QString());
                 m_view->setCurrentSearchResultIndex(-1);
-                updateNormalSearchMinimap(QString());
+                updateSearchMinimap(QString());
             }
             updateSearchStatus();
         });
     }
 
-    // Navigate between matches with Enter/Shift+Enter
+    // Navigate between matches with Enter
     connect(m_searchEdit, &QLineEdit::returnPressed, this, [this]{
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0)
@@ -258,6 +281,7 @@ void MainWindow::setupUi()
         updateSearchStatus();
     });
 
+    // Find next/previous actions
     connect(m_actFindNext, &QAction::triggered, this, [this]{
         int count = m_searchModel->rowCount(QModelIndex());
         if (count <= 0) return;
@@ -276,15 +300,14 @@ void MainWindow::setupUi()
         updateSearchStatus();
     });
 
-    // Status updates
+    // Update search status when results change
     connect(m_searchModel, &QPdfSearchModel::countChanged, this, &MainWindow::updateSearchStatus);
-    // Ensure highlighting kicks in while typing: set current index to 0 when results appear
     connect(m_searchModel, &QPdfSearchModel::countChanged, this, [this]{
         const QString term = m_searchEdit ? m_searchEdit->text() : QString();
         const int count = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
         if (term.size() >= 2 && count > 0) {
             if (m_view->currentSearchResultIndex() < 0)
-                m_view->setCurrentSearchResultIndex(0); // do not jump here
+                m_view->setCurrentSearchResultIndex(0);
         } else {
             m_view->setCurrentSearchResultIndex(-1);
         }
@@ -292,31 +315,31 @@ void MainWindow::setupUi()
     connect(m_searchModel, &QPdfSearchModel::countChanged, this, [this]{
         const QString term = m_searchEdit ? m_searchEdit->text() : QString();
         if (term.size() >= 2)
-            updateNormalSearchMinimap(term);
+            updateSearchMinimap(term);
     });
     connect(m_view, &QPdfView::currentSearchResultIndexChanged, this, &MainWindow::updateSearchStatus);
-    // Page count label updates
+
+    // Update page count label when document loads
     connect(m_doc, &QPdfDocument::pageCountChanged, this, [this](int){
         updatePageCountLabel();
-        updateSecretPageMetrics();
+        updatePageMetrics();
     });
 
-    // Thumbnail toggle action connection
+    // Thumbnail toggle
     connect(m_toggleThumbnails, &QAction::toggled, this, [this](bool checked){
         if (m_thumbnailDock)
             m_thumbnailDock->setVisible(checked);
     });
 
-    // Hook page selector <-> view navigator
+    // Connect page selector with view navigator
     if (auto* nav = m_view->pageNavigator()) {
         connect(nav, &QPdfPageNavigator::currentPageChanged, pageSel, &QPdfPageSelector::setCurrentPage);
         connect(pageSel, &QPdfPageSelector::currentPageChanged, this, [this, nav](int p){ nav->jump(p, QPointF(0,0)); });
-        // Update thumbnail highlight when page changes
         connect(nav, &QPdfPageNavigator::currentPageChanged, this, &MainWindow::updateCurrentPageHighlight);
         connect(nav, &QPdfPageNavigator::currentPageChanged, this, &MainWindow::updateViewportOverlay);
     }
 
-    // Navigation actions
+    // Page navigation actions
     connect(prevPage, &QAction::triggered, this, [this]{
         if (!m_doc || !m_view->pageNavigator()) return;
         int p = m_view->pageNavigator()->currentPage();
@@ -356,7 +379,7 @@ void MainWindow::setupUi()
         }
     });
 
-    // Print action (render each page to printer)
+    // Print action
     connect(printAct, &QAction::triggered, this, [this]{
         if (!m_doc || m_doc->pageCount() <= 0) return;
         QPrinter printer(QPrinter::HighResolution);
@@ -375,6 +398,7 @@ void MainWindow::setupUi()
         }
     });
 
+    // Email action
     connect(mailAct, &QAction::triggered, this, [this]{
         if (m_currentFilePath.isEmpty()) {
             QMessageBox::warning(this, tr("Email"), tr("Please open a PDF first."));
@@ -398,14 +422,14 @@ void MainWindow::setupUi()
 
 void MainWindow::setupShortcuts()
 {
-    // Ctrl+F focuses search
+    // Ctrl+F focuses search box
     auto* focusFind = new QShortcut(QKeySequence::Find, this);
     connect(focusFind, &QShortcut::activated, this, [this]{
         m_searchEdit->setFocus(Qt::ShortcutFocusReason);
         m_searchEdit->selectAll();
     });
 
-    // Ctrl+C copies current selection (or current search match as fallback)
+    // Ctrl+C copies selection or current search match
     auto* copyAct = new QAction(tr("Copy"), this);
     copyAct->setShortcut(QKeySequence::Copy);
     addAction(copyAct);
@@ -421,7 +445,7 @@ void MainWindow::setupShortcuts()
         }
     });
 
-    // Esc clears search
+    // Escape clears search
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(esc, &QShortcut::activated, this, [this]{ m_searchEdit->clear(); });
 }
@@ -440,11 +464,9 @@ void MainWindow::openPdf(const QString& filePath)
     m_currentFilePath = fi.absoluteFilePath();
     setWindowTitle(fi.fileName());
     updatePageCountLabel();
-
-    // Thumbnail'ları güncelle
     updateThumbnails();
-    updateSecretPageMetrics();
-    updateNormalSearchMinimap(m_searchEdit ? m_searchEdit->text() : QString());
+    updatePageMetrics();
+    updateSearchMinimap(m_searchEdit ? m_searchEdit->text() : QString());
     updateViewportOverlay();
 }
 
@@ -480,7 +502,6 @@ void MainWindow::jumpToSearchResult(int idx)
             nav->jump(link);
         return;
     }
-    // Ensure the first match rectangle is visible within the page
     m_view->ensurePageRectVisible(link.page(), rects.first());
 }
 
@@ -493,7 +514,6 @@ void MainWindow::updatePageCountLabel()
 
 void MainWindow::raiseAndActivate()
 {
-    // Bring window to front and activate
     setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
     raise();
     activateWindow();
@@ -545,7 +565,6 @@ void MainWindow::dropEvent(QDropEvent* ev)
 
 void MainWindow::setupThumbnailPanel()
 {
-    // Create QDockWidget for thumbnail panel on the left side
     m_thumbnailDock = new QDockWidget(tr("Pages"), this);
     m_thumbnailDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
@@ -559,11 +578,8 @@ void MainWindow::setupThumbnailPanel()
 
     m_thumbnailDock->setWidget(m_thumbnailList);
     addDockWidget(Qt::LeftDockWidgetArea, m_thumbnailDock);
-
-    // Hidden by default (user preference)
     m_thumbnailDock->hide();
 
-    // Navigate to page when thumbnail is clicked
     connect(m_thumbnailList, &QListWidget::currentRowChanged, this, [this](int row){
         if (row >= 0 && m_view && m_view->pageNavigator()) {
             m_view->pageNavigator()->jump(row, QPointF(0, 0));
@@ -571,12 +587,12 @@ void MainWindow::setupThumbnailPanel()
     });
 }
 
-void MainWindow::setupSecretSearchPanel()
+void MainWindow::setupSearchMinimap()
 {
-    if (!m_secretPanel)
+    if (!m_minimapPanel)
         return;
 
-    connect(m_secretPanel, &SecretSearchPanel::markerActivated, this, [this](int page, const QRectF& rect){
+    connect(m_minimapPanel, &SearchMinimapPanel::markerActivated, this, [this](int page, const QRectF& rect){
         if (!m_view)
             return;
         QRectF targetRect = rect;
@@ -602,19 +618,18 @@ void MainWindow::updateThumbnails()
     if (pageCount <= 0)
         return;
 
-    // Create high quality preview for each page (2x render for sharper image)
+    // Render high-quality thumbnails (2x resolution for sharpness)
     for (int i = 0; i < pageCount; ++i) {
-        const QSize renderSize(440, 440);  // 2x high resolution
+        const QSize renderSize(440, 440);
         QImage thumbnail = m_doc->render(i, renderSize);
 
         auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(thumbnail)),
                                          QString::number(i + 1),
                                          m_thumbnailList);
         item->setTextAlignment(Qt::AlignCenter);
-        item->setData(Qt::UserRole, i); // Store page number
+        item->setData(Qt::UserRole, i);
     }
 
-    // Select first page
     if (pageCount > 0)
         m_thumbnailList->setCurrentRow(0);
 }
@@ -626,68 +641,67 @@ void MainWindow::updateCurrentPageHighlight()
 
     const int currentPage = m_view->pageNavigator()->currentPage();
 
-    // Update list item (block signals to prevent signal loop)
+    // Block signals to prevent feedback loop
     m_thumbnailList->blockSignals(true);
     if (currentPage >= 0 && currentPage < m_thumbnailList->count())
         m_thumbnailList->setCurrentRow(currentPage);
     m_thumbnailList->blockSignals(false);
 }
 
-void MainWindow::updateSecretPageMetrics()
+void MainWindow::updatePageMetrics()
 {
-    m_secretPageHeights.clear();
-    if (!m_secretPanel)
+    m_pageHeights.clear();
+    if (!m_minimapPanel)
         return;
     if (!m_doc) {
-        m_secretPanel->setPageHeights({});
+        m_minimapPanel->setPageHeights({});
         clearMinimapMarkers(tr("No document"));
         return;
     }
 
     const int pageCount = m_doc->pageCount();
     if (pageCount <= 0) {
-        m_secretPanel->setPageHeights({});
+        m_minimapPanel->setPageHeights({});
         clearMinimapMarkers(tr("No document"));
         return;
     }
 
-    m_secretPageHeights.reserve(pageCount);
+    m_pageHeights.reserve(pageCount);
     for (int i = 0; i < pageCount; ++i) {
         const QSizeF pts = m_doc->pagePointSize(i);
-        m_secretPageHeights.append(qMax<qreal>(pts.height(), 1.0));
+        m_pageHeights.append(qMax<qreal>(pts.height(), 1.0));
     }
-    m_secretPanel->setPageHeights(m_secretPageHeights);
+    m_minimapPanel->setPageHeights(m_pageHeights);
     updateViewportOverlay();
 }
 
 void MainWindow::clearMinimapMarkers(const QString& message)
 {
-    if (!m_secretPanel)
+    Q_UNUSED(message);
+    if (!m_minimapPanel)
         return;
-    m_secretPanel->setMarkers({});
-    if (!message.isEmpty())
-        m_secretPanel->setStatusMessage(message);
+    m_minimapPanel->setMarkers({});
     m_currentMinimapSource = MinimapSource::None;
 }
 
 void MainWindow::updateViewportOverlay()
 {
     if (!m_view || !m_doc) {
-        if (m_secretPanel)
-            m_secretPanel->setViewportRange(-1.0, -1.0);
+        if (m_minimapPanel)
+            m_minimapPanel->setViewportRange(-1.0, -1.0);
         positionFloatingMinimap();
         return;
     }
 
     QScrollBar* vsb = m_verticalScrollBar ? m_verticalScrollBar : m_view->verticalScrollBar();
     if (!vsb) {
-        if (m_secretPanel)
-            m_secretPanel->setViewportRange(-1.0, -1.0);
+        if (m_minimapPanel)
+            m_minimapPanel->setViewportRange(-1.0, -1.0);
         positionFloatingMinimap();
         return;
     }
 
-    if (!m_secretPanel) {
+    if (!m_minimapPanel) {
         positionFloatingMinimap();
         return;
     }
@@ -696,7 +710,7 @@ void MainWindow::updateViewportOverlay()
     const int maxVal = qMax(0, vsb->maximum());
     const int denom = pageStep + maxVal;
     if (denom <= 0) {
-        m_secretPanel->setViewportRange(-1.0, -1.0);
+        m_minimapPanel->setViewportRange(-1.0, -1.0);
         positionFloatingMinimap();
         return;
     }
@@ -704,31 +718,31 @@ void MainWindow::updateViewportOverlay()
     const int currentVal = vsb->value();
     qreal start = qBound<qreal>(0.0, qreal(currentVal) / qreal(denom), 1.0);
     qreal end = qBound<qreal>(start + 0.001, qreal(currentVal + pageStep) / qreal(denom), 1.0);
-    m_secretPanel->setViewportRange(start, end);
+    m_minimapPanel->setViewportRange(start, end);
     positionFloatingMinimap();
 }
 
 void MainWindow::positionFloatingMinimap()
 {
-    if (!m_secretPanel)
+    if (!m_minimapPanel)
         return;
 
     if (!m_verticalScrollBar) {
-        m_secretPanel->hide();
+        m_minimapPanel->hide();
         return;
     }
 
-    if (m_secretPanel->parentWidget() != m_verticalScrollBar)
-        m_secretPanel->setParent(m_verticalScrollBar);
+    if (m_minimapPanel->parentWidget() != m_verticalScrollBar)
+        m_minimapPanel->setParent(m_verticalScrollBar);
 
     const QRect sbGeom = m_verticalScrollBar->rect();
     const int w = sbGeom.width();
     const int h = sbGeom.height();
 
-    m_secretPanel->setFixedWidth(w);
-    m_secretPanel->setGeometry(0, 0, w, h);
-    m_secretPanel->raise();
-    m_secretPanel->show();
+    m_minimapPanel->setFixedWidth(w);
+    m_minimapPanel->setGeometry(0, 0, w, h);
+    m_minimapPanel->raise();
+    m_minimapPanel->show();
 }
 
 void MainWindow::adjustToolBarStyle()
@@ -754,7 +768,7 @@ bool MainWindow::computePageOffsets(QVector<qreal>& offsets, qreal& totalHeight)
     if (pageCount <= 0)
         return false;
 
-    QVector<qreal> pageHeights = m_secretPageHeights;
+    QVector<qreal> pageHeights = m_pageHeights;
     if (pageHeights.size() != pageCount) {
         pageHeights.clear();
         pageHeights.reserve(pageCount);
@@ -772,14 +786,14 @@ bool MainWindow::computePageOffsets(QVector<qreal>& offsets, qreal& totalHeight)
     return true;
 }
 
-void MainWindow::updateNormalSearchMinimap(const QString& term)
+void MainWindow::updateSearchMinimap(const QString& term)
 {
-    if (!m_secretPanel)
+    if (!m_minimapPanel)
         return;
 
     const QString trimmed = term.trimmed();
     if (!m_doc || m_doc->pageCount() <= 0 || trimmed.size() < 2) {
-        if (m_currentMinimapSource == MinimapSource::Normal)
+        if (m_currentMinimapSource == MinimapSource::NormalSearch)
             clearMinimapMarkers(tr("0 Results"));
         return;
     }
@@ -787,7 +801,7 @@ void MainWindow::updateNormalSearchMinimap(const QString& term)
     const int resultCount = m_searchModel ? m_searchModel->rowCount(QModelIndex()) : 0;
     if (resultCount <= 0) {
         clearMinimapMarkers(tr("0 Results"));
-        m_currentMinimapSource = MinimapSource::Normal;
+        m_currentMinimapSource = MinimapSource::NormalSearch;
         return;
     }
 
@@ -825,18 +839,17 @@ void MainWindow::updateNormalSearchMinimap(const QString& term)
 
     if (markers.isEmpty()) {
         clearMinimapMarkers(tr("0 Results"));
-        m_currentMinimapSource = MinimapSource::Normal;
+        m_currentMinimapSource = MinimapSource::NormalSearch;
         return;
     }
 
-    m_secretPanel->setMarkers(markers);
-    m_secretPanel->setStatusMessage(tr("%1 Results").arg(markers.size()));
-    m_currentMinimapSource = MinimapSource::Normal;
+    m_minimapPanel->setMarkers(markers);
+    m_currentMinimapSource = MinimapSource::NormalSearch;
 }
 
-void MainWindow::runSecretSearch(const QString& termsText)
+void MainWindow::runMultiTermSearch(const QString& termsText)
 {
-    if (!m_secretPanel) return;
+    if (!m_minimapPanel) return;
     if (!m_doc || m_doc->pageCount() <= 0) {
         clearMinimapMarkers(tr("No PDF open"));
         return;
@@ -858,24 +871,10 @@ void MainWindow::runSecretSearch(const QString& termsText)
 
     QVector<MiniMapMarker> markers;
     QVector<int> counts;
-    const int totalMatches = collectMarkersForTerms(terms, markers, counts);
+    collectMarkersForTerms(terms, markers, counts);
 
-    QStringList pieces;
-    for (int i = 0; i < terms.size(); ++i) {
-        pieces << QStringLiteral("%1:%2").arg(terms.at(i)).arg(counts.at(i));
-    }
-
-    QString summary;
-    if (totalMatches == 0) {
-        summary = tr("No results found");
-    } else {
-        summary = pieces.join(QStringLiteral("  |  "));
-        summary.append(QStringLiteral("  ||  Total: %1").arg(totalMatches));
-    }
-
-    m_secretPanel->setMarkers(markers);
-    m_secretPanel->setStatusMessage(summary);
-    m_currentMinimapSource = MinimapSource::Secret;
+    m_minimapPanel->setMarkers(markers);
+    m_currentMinimapSource = MinimapSource::MultiTermSearch;
 }
 
 void MainWindow::setOriginalFile(const QString& originalPath)
@@ -891,11 +890,9 @@ void MainWindow::setOriginalFile(const QString& originalPath)
 
     QFileInfo fi(originalPath);
     m_originalFilePath = fi.absoluteFilePath();
-
-    // Set title to original file name
     setWindowTitle(fi.fileName());
 
-    // Determine icon based on extension
+    // Set icon based on file extension
     const QString ext = fi.suffix().toLower();
     QIcon fileIcon;
     if (ext == QStringLiteral("pdf")) {
@@ -903,7 +900,6 @@ void MainWindow::setOriginalFile(const QString& originalPath)
     } else if (ext == QStringLiteral("udf")) {
         fileIcon = QIcon(QStringLiteral(":/icons/udf.ico"));
     } else {
-        // Default file icon for other extensions
         fileIcon = style()->standardIcon(QStyle::SP_FileIcon);
     }
 
@@ -924,10 +920,10 @@ int MainWindow::collectMarkersForTerms(const QStringList& terms,
     if (!m_doc || terms.isEmpty())
         return 0;
 
-    if (m_secretPageHeights.size() != m_doc->pageCount())
-        updateSecretPageMetrics();
+    if (m_pageHeights.size() != m_doc->pageCount())
+        updatePageMetrics();
 
-    QVector<qreal> pageHeights = m_secretPageHeights;
+    QVector<qreal> pageHeights = m_pageHeights;
     if (pageHeights.size() != m_doc->pageCount()) {
         pageHeights.clear();
         const int pc = m_doc->pageCount();

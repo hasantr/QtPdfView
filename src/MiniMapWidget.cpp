@@ -1,3 +1,8 @@
+/**
+ * @file MiniMapWidget.cpp
+ * @brief Implementation of the minimap widget for displaying document markers.
+ */
+
 #include "MiniMapWidget.h"
 
 #include <QMouseEvent>

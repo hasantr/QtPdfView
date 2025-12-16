@@ -1,15 +1,20 @@
-#include "SecretSearchPanel.h"
+/**
+ * @file SearchMinimapPanel.cpp
+ * @brief Implementation of SearchMinimapPanel.
+ */
 
+#include "SearchMinimapPanel.h"
 #include "MiniMapWidget.h"
 
 #include <QVBoxLayout>
 
-SecretSearchPanel::SecretSearchPanel(QWidget* parent)
+SearchMinimapPanel::SearchMinimapPanel(QWidget* parent)
     : QWidget(parent)
 {
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
     setAutoFillBackground(false);
+
     auto* layout = new QVBoxLayout(this);
     layout->setSpacing(0);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -23,24 +28,19 @@ SecretSearchPanel::SecretSearchPanel(QWidget* parent)
     });
 }
 
-void SecretSearchPanel::setPageHeights(const QVector<qreal>& heights)
+void SearchMinimapPanel::setPageHeights(const QVector<qreal>& heights)
 {
     if (m_minimap)
         m_minimap->setPageHeights(heights);
 }
 
-void SecretSearchPanel::setMarkers(const QVector<MiniMapMarker>& markers)
+void SearchMinimapPanel::setMarkers(const QVector<MiniMapMarker>& markers)
 {
     if (m_minimap)
         m_minimap->setMarkers(markers);
 }
 
-void SecretSearchPanel::setStatusMessage(const QString& text)
-{
-    Q_UNUSED(text);
-}
-
-void SecretSearchPanel::setViewportRange(qreal start, qreal end)
+void SearchMinimapPanel::setViewportRange(qreal start, qreal end)
 {
     if (m_minimap)
         m_minimap->setViewportRange(start, end);

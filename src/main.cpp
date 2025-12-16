@@ -1,3 +1,20 @@
+/**
+ * @file main.cpp
+ * @brief Application entry point for QtPdfView.
+ *
+ * This file handles:
+ * - Single instance management (only one window at a time)
+ * - Command line argument parsing
+ * - Application initialization
+ *
+ * Usage:
+ *   QtPdfView.exe [pdf_path] [original_file_path]
+ *
+ * Arguments:
+ *   pdf_path           - Path to PDF file to display
+ *   original_file_path - Optional path to original file (for "Open" button)
+ */
+
 #include "MainWindow.h"
 
 #include <QApplication>

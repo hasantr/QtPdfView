@@ -1,3 +1,8 @@
+/**
+ * @file SelectablePdfView.cpp
+ * @brief Implementation of text selection for PDF view.
+ */
+
 #include "SelectablePdfView.h"
 
 #include <QAbstractItemModel>

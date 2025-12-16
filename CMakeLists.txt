@@ -24,8 +24,8 @@ add_executable(QtPdfView
     src/SelectablePdfView.cpp
     src/MiniMapWidget.h
     src/MiniMapWidget.cpp
-    src/SecretSearchPanel.h
-    src/SecretSearchPanel.cpp
+    src/SearchMinimapPanel.h
+    src/SearchMinimapPanel.cpp
     resources/icons.qrc
     $<$<PLATFORM_ID:Windows>:app.rc>
 )
