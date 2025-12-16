@@ -15,9 +15,9 @@ A minimal, fast PDF viewer built with Qt 6 Widgets.
 - Single instance mode (new files open in existing window)
 - Minimap with search result indicators
 
-## Screenshots
+## Screenshot
 
-*(Add screenshots here)*
+![QtPdfView Preview](Preview.png)
 
 ## Requirements
 
