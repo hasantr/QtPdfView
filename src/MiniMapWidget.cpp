@@ -125,8 +125,8 @@ void MiniMapWidget::mouseMoveEvent(QMouseEvent* ev)
 
     const MiniMapMarker* best = markerNearY(y, threshold, r);
     if (best) {
-        const QString hint = QStringLiteral("%1 (Sayfa %2)")
-                                 .arg(best->label.isEmpty() ? QObject::tr("Sonuç") : best->label)
+        const QString hint = QStringLiteral("%1 (Page %2)")
+                                 .arg(best->label.isEmpty() ? QObject::tr("Result") : best->label)
                                  .arg(best->page + 1);
         if (hint != m_lastHint)
             QToolTip::showText(ev->globalPosition().toPoint(), hint, this);
